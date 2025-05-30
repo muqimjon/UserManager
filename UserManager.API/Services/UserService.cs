@@ -2,10 +2,11 @@
 
 using UserManager.API.Data;
 using UserManager.API.Models;
+using UserManager.API.Models.DTOs;
 
 public class UserService(IUserRepository repository) : IUserService
 {
-    public async Task RegisterAsync(RegisterRequest request)
+    public async Task<int> RegisterAsync(RegisterRequest request)
     {
         var user = new User
         {
@@ -14,13 +15,13 @@ public class UserService(IUserRepository repository) : IUserService
             PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password)
         };
         await repository.AddAsync(user);
-        await repository.SaveAsync();
+        return await repository.SaveAsync();
     }
 
     public async Task<User?> LoginAsync(LoginRequest request)
     {
         var user = await repository.GetByEmailAsync(request.Email);
-        if (user is null) return null;
+        if (user is null || user.IsBlocked) return null;
         if (!BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash)) return null;
         user.LastLoginAt = DateTimeOffset.UtcNow;
         repository.Update(user);
@@ -32,35 +33,32 @@ public class UserService(IUserRepository repository) : IUserService
         => repository.GetAll()
                      .OrderByDescending(u => u.LastLoginAt);
 
-    public async Task BlockAsync(long id)
+    public async Task<int> BlockAsync(long id)
     {
         var user = await repository.GetByIdAsync(id);
-        if (user is not null)
-        {
-            user.IsBlocked = true;
-            repository.Update(user);
-            await repository.SaveAsync();
-        }
+        if (user is null)
+            return default;
+        user.IsBlocked = true;
+        repository.Update(user);
+        return await repository.SaveAsync();
     }
 
-    public async Task UnblockAsync(long id)
+    public async Task<int> UnblockAsync(long id)
     {
         var user = await repository.GetByIdAsync(id);
-        if (user is not null)
-        {
-            user.IsBlocked = false;
-            repository.Update(user);
-            await repository.SaveAsync();
-        }
+        if (user is null)
+            return default;
+        user.IsBlocked = false;
+        repository.Update(user);
+        return await repository.SaveAsync();
     }
 
-    public async Task DeleteAsync(long id)
+    public async Task<int> DeleteAsync(long id)
     {
         var user = await repository.GetByIdAsync(id);
-        if (user is not null)
-        {
-            repository.Delete(user);
-            await repository.SaveAsync();
-        }
+        if (user is null)
+            return default;
+        repository.Delete(user);
+        return await repository.SaveAsync();
     }
 }
